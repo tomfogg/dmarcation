@@ -1,0 +1,15 @@
+{
+  "name": "dmarcation",
+  "version": "1.0.0",
+  "description": "show stats from DMARC summary reports",
+  "repository": "https://github.com/tomfogg/dmarcation.git",
+  "main": "dmarcation.js",
+  "author": "tom@canobe.com",
+  "license": "GPL-2.0",
+  "bin": {
+    "dmarcation": "dmarcation.js"
+  },
+  "scripts": {
+    "start": "node dmarcation.js"
+  }
+}
