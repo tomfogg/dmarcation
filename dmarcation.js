@@ -70,7 +70,7 @@ async function processLineByLine() {
                 } else {
                     res.setHeader("Content-Type", 'text/html');
                     res.writeHead(200);
-                    res.end(fs.readFileSync('graph.html'));
+                    res.end(fs.readFileSync('/codecopy/graph.html'));
                 }
             }).listen(8000);
         }
@@ -105,9 +105,14 @@ async function processLineByLine() {
                         if(p.dkim[0] == 'fail') stats[t].fail_dkim += c;
 
                     };
-
+                    if(!graphstats[day]) {
+                        graphstats[day] = { total: 0, fail_spf: 0, fail_dkim: 0};
+                        graphstats[day].tostats = {};
+                        graphstats[day].fromstats = {};
+                    }
                     dostats(day,graphstats);
                     dostats(t,tostats);
+                    dostats(t,graphstats[day].tostats);
                     if(source in dnscache) {
                         if(typeof dnscache[source] === 'object') dnscache[source].push(dostats);
                         else dostats(dnscache[source],fromstats);
@@ -125,6 +130,7 @@ async function processLineByLine() {
                             }
                             const t = e?source:h.toString().match(/([^/.]+\.(com|co)\.\w+|[^/.]+.\w+)$/)[1];
                             dnscache[source].map(f=>f(t,fromstats));
+                            dnscache[source].map(f=>f(t,graphstats[day].fromstats));
                             dnscache[source] = t;
                             done();
                         };
