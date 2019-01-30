@@ -8,7 +8,7 @@ const Resolver = require('dns').Resolver;
 
 const NUM_RESOLVERS = 10;
 const MAX_RETRIES = 5;
-const DO_LOOKUP = false;
+const DO_LOOKUP = true;
 
 const resolver = [];
 for(let i=0;i<NUM_RESOLVERS;i++) {
