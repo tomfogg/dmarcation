@@ -2,6 +2,40 @@ let margin = {top: 50, right: 50, bottom: 100, left: 50}
     , width = window.innerWidth - margin.left - margin.right 
     , height = window.innerHeight - margin.top - margin.bottom;
 
+const state2url = s => {
+    let url = "/"+Object.keys(s)
+        .filter(d=>['options'].indexOf(d)==-1 && s[d])
+        .map(d=>d+"/"+s[d])
+        .join('/');
+    if('options' in s && Object.keys(s.options).length) {
+        let opt = Object.keys(s.options)
+            .filter(d=>typeof s.options[d] !== 'function' && s.options[d] && s.options[d] != undefined)
+            .map(d=>d+"="+(s.options[d] instanceof Date ? +s.options[d] : s.options[d]))
+            .join('&');
+        if(opt !== '') url+=(url.match(/\/$/) ? "?" : "/?")+opt;
+    }
+    return url;
+};
+
+const url2state = (url) => {
+    let s = url.split(/\//)
+        .filter(a=>a.length)
+        .map(d=>d.replace(/\?.*$/,''))
+        .reduce((s,v,i,a)=>{if(i<a.length-1 && i % 2 == 0) s[v]=a[i+1]; return s;},{});
+    s.options = url.substr(url.indexOf('?')+1)
+        .split(/&/)
+        .filter(d=>d.match(/.+=.*/))
+        .reduce((i,d)=>{
+            var k = d.split(/=/)[0];
+            var v = d.split(/=/)[1];
+            i[k] = v;
+            return i;
+        },{});
+    if(Object.keys(s.options).length == 0) delete s.options;
+    state = {};
+    Object.assign(state,s);
+    return s;
+};
 
 d3.json('/dmarc.json').then((data) => {
 
@@ -21,12 +55,13 @@ d3.json('/dmarc.json').then((data) => {
         return s; 
     },[]);
 
-    let series = Object.keys(dataset[0]).filter(d=>['x','fromstats','tostats'].indexOf(d)<0);
-    let showing = series.reduce((s,d)=>{s[d]=true; return s;},{});
+    let stattypes = ['fromstats','tostats'];
+    let series = Object.keys(dataset[0]).filter(d=>stattypes.concat('x').indexOf(d)<0);
+    let state = {
+        showing: series.join(','),
+    };
 
-    let drawGraph = (dataset, type='line') => {
-
-        console.log(dataset.slice(0,5),type);
+    let drawGraph = (dataset,showing,type='line') => {
 
         let xScale = d3.scaleTime()
             .domain(d3.extent(dataset.map(d=>d.x)))
@@ -37,7 +72,7 @@ d3.json('/dmarc.json').then((data) => {
             .rangeRound([0,width]);
 
         let yScale = d3.scaleLinear()
-            .domain([0,d3.max(dataset.map(d=>d3.max(Object.keys(showing).map(s=>d[s]))))])
+            .domain([0,d3.max(dataset.map(d=>d3.max(showing.map(s=>d[s]))))])
             .range([height, 0]);
 
 
@@ -74,7 +109,7 @@ d3.json('/dmarc.json').then((data) => {
         series.map((s,si)=>{
             let sgroup = svg.append("g")
                 .classed(s,true)
-                .classed("hidden", !(s in showing));
+                .classed("hidden", showing.indexOf(s) < 0);
 
             if(type == 'line') {
                 sgroup.selectAll("."+s+"-dot")
@@ -89,8 +124,10 @@ d3.json('/dmarc.json').then((data) => {
                     .on("mouseover", (d,i) => showlabel(i,false))
                     .on("mouseout", (d,i) => showlabel(i,true))
                     .on("click", (d,i) => {
-                        showing = series.reduce((s,d)=>{s[d]=true; return s;},{});
-                        drawGraph(dataset[i].fromstats,'bar')
+                        state.day = i;
+                        state.daytype = stattypes[0];
+                        history.pushState({},"",state2url(state));
+                        url2graph();
                     });
                 sgroup.append("path")
                     .datum(dataset)
@@ -119,21 +156,51 @@ d3.json('/dmarc.json').then((data) => {
                 .attr("dx","-10em")
                 .attr("dy",si+"em")
                 .attr("fill",d3.schemeCategory10[si])
-                .text(s+" "+(s in showing ? " (hide)" : " (show)"))
+                .text(s+" "+(showing.indexOf(s) < 0 ? " (show)" : " (hide)"))
                 .on("click",(e,i,c)=>{
-                    if(s in showing && Object.keys(showing).length > 1) delete showing[s];
-                    else showing[s] = true;
-                    sgroup.classed("hidden",!(s in showing));
-                    d3.select(c[0]).text(s+" "+(s in showing ? " (hide)" : " (show)"));
-                    drawGraph(dataset,type);
+                    if(showing.length > 1 && showing.indexOf(s) >= 0) showing=showing.filter(d=>d!=s);
+                    else showing.push(s);
+                    sgroup.classed("hidden",showing.indexOf(s) < 0);
+                    d3.select(c[0]).text(s+" "+(showing.indexOf(s) < 0 ? " (show)" : " (hide)"));
+                    state.showing = showing.join(',');
+                    history.pushState({},"",state2url(state));
+                    url2graph();
                 });
         });
+       
+        if(state.daytype) {
+            stattypes.map((s,si)=>svg.append("text")
+                .attr("x",width)
+                .attr("dx","-10em")
+                .attr("dy",series.length+1+si+"em")
+                .attr("fill",d3.schemeCategory10[si])
+                .text(s+" "+(state.daytype!=s ? " (show)" : " (showing)"))
+                .on("click",(e,i,c)=>{
+                    state.daytype=s;
+                    d3.select(c[0]).text(s+" "+(state.daytype!=s ? " (show)" : " (showing)"));
+                    history.pushState({},"",state2url(state));
+                    url2graph();
+                }));
+
+            svg.append("text")
+                .attr("x",width)
+                .attr("dx","-10em")
+                .attr("dy",stattypes.length+series.length+2+"em")
+                .attr("fill",'black')
+                .text('back')
+                .on("click",()=>{
+                    delete state.daytype;
+                    delete state.day;
+                    history.pushState({},"",state2url(state));
+                    url2graph();
+                });
+        }
 
         let label = svg.selectAll(".label")
             .data(dataset)
             .enter().append("g")
             .attr("class", "label hidden")
-            .attr("transform", d => "translate("+(10+xScale(d.x))+","+(yScale(d[Object.keys(showing)[0]])-50)+")");
+            .attr("transform", d => "translate("+(10+xScale(d.x))+","+(yScale(d[showing[0]])-50)+")");
 
         label.append("rect")
             .attr("width", "8em")
@@ -152,6 +219,16 @@ d3.json('/dmarc.json').then((data) => {
         });
     };
 
-    drawGraph(dataset);
-   
+    let url2graph = () => {
+        state = url2state(location.href.replace(location.origin,''));
+        if(!('showing' in state)) {
+            history.pushState({},"",state2url(state));
+        }
+        if(state.day) {
+            drawGraph(dataset[state.day][state.daytype],state.showing.split(/,/),'bar');
+        } else drawGraph(dataset,state.showing.split(/,/));
+    };
+
+    url2graph();
+    window.onpopstate = url2graph;
 });
