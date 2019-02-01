@@ -37,9 +37,11 @@ async function processLineByLine() {
     let readmailbox = false;
 
     const done = () => {
+        const used = process.memoryUsage().heapUsed / 1024 / 1024;
+
         process.stdout.write("\r"+Object.keys(dnscache)
             .filter(d=>typeof dnscache[d] === 'object').length+' DNS lookups left       '
-            +Object.keys(dnscache).length+' total lookups');
+            +Object.keys(dnscache).length+' total lookups  '+(Math.round(used * 100) / 100)+' MB used');
 
         if(readmailbox && Object.keys(dnscache).length > 0 
             && Object.keys(dnscache).filter(d=>typeof dnscache[d] === 'object').length === 0) {
@@ -54,6 +56,10 @@ async function processLineByLine() {
             display(tostats);
             console.log('stats by day');
             console.log(graphstats);
+
+            const clip = stats=>Object.keys(stats)
+                .sort((a,b)=>stats[a].total-stats[b].total)
+                .slice(-20).reduce((s,d)=>{s[d] = stats[d]; return s;},{});
             
             console.log('listening on 8000');
             require('http').createServer(function (req, res) {
@@ -62,7 +68,15 @@ async function processLineByLine() {
                 if(req.url.match(/^\/dmarc.json/)) {
                     res.setHeader("Content-Type", 'application/json');
                     res.writeHead(200);
-                    res.end(JSON.stringify(graphstats));
+                    res.end(JSON.stringify({
+                        days: Object.keys(graphstats).reduce((s,d)=>{
+                            s[d]={...graphstats[d], 
+                                fromstats: clip(graphstats[d].fromstats), 
+                                tostats: clip(graphstats[d].tostats)};
+                            return s;
+                        },{}), 
+                        fromstats: clip(fromstats), 
+                        tostats: clip(tostats)}));
                 } else if(req.url.match(/^\/graph.js/)) {
                     res.setHeader("Content-Type", 'application/javascript');
                     res.writeHead(200);
