@@ -6,20 +6,64 @@ const parseString = require('xml2js').parseString;
 const zlib = require('zlib');
 const Resolver = require('dns').Resolver;
 
-const NUM_RESOLVERS = 10;
 const MAX_RETRIES = 5;
 const DO_LOOKUP = true;
 
-const resolver = [];
-for(let i=0;i<NUM_RESOLVERS;i++) {
-    resolver[i] = new Resolver();
-    resolver[i].setServers([
-        '1.1.1.1',
-        '8.8.8.8',
-        '1.0.0.1',
-        '8.8.4.4'
-    ].sort(()=>Math.random()-0.5));
-}
+const resolver = ['1.1.1.1',
+    '8.8.8.8',
+    '1.0.0.1',
+    '8.8.4.4',
+    '9.9.9.9',
+    '149.112.122.112',
+    '208.67.222.222', 
+    '208.67.220.220']
+    .map(d=>{
+        const r = new Resolver();
+        r.setServers([d]);
+        return {
+            active: false, 
+            resolve: r};
+    });
+
+const cache = {};
+const retry = {};
+
+const report = () => process.stdout.write("\r"+
+    'LOOKUPS '+Object.keys(cache).length+
+    ' DONE '+Object.keys(cache).reduce((s,d)=>s+(cache[d] !== false ? 1 : 0),0)+
+    ' RETRIES '+Object.keys(retry).reduce((s,d)=>s+retry[d],0)+
+    ' FAILS '+  Object.keys(retry).reduce((s,d)=>s+(retry[d]>MAX_RETRIES?1:0),0)+
+    '        ');
+
+const lookup = (ip,result) => {
+    if(!(ip in cache)) cache[ip] = false;
+    if(!DO_LOOKUP) return result(ip);
+    if(cache[ip] !== false) return result(cache[ip]);
+    const ready = resolver.reduce((s,d,i)=>d.active?s:i,-1);
+    if(ready < 0) {
+        setTimeout(()=>lookup(ip,result),1000*(ip in retry ? retry[ip] : 1)+Math.random()*5000);
+    } else {
+        resolver[ready].active = true;
+        resolver[ready].resolve.reverse(ip,(err,host)=>{
+            resolver[ready].active = false;
+            if(err) {
+                if(retry[ip] > MAX_RETRIES) {
+                    cache[ip] = ip;
+                    report();
+                    return result(ip);
+                }
+                retry[ip] = retry[ip] ? retry[ip]+1 : 1;
+                lookup(ip,result);
+            } else {
+                cache[ip] = host[0];
+                report();
+                result(host[0]);
+            }
+        });
+    }
+};
+
+const donelookup = () => Object.keys(cache).reduce((s,d)=>s+(cache[d] === false ? 1 : 0),0) == 0;
 
 async function processLineByLine() {
     const fromstats = {};
@@ -35,16 +79,11 @@ async function processLineByLine() {
     let mail = '';
     let maxgap = 0;
     let readmailbox = false;
+    let fin = false;
 
     const done = () => {
-        const used = process.memoryUsage().heapUsed / 1024 / 1024;
-
-        process.stdout.write("\r"+Object.keys(dnscache)
-            .filter(d=>typeof dnscache[d] === 'object').length+' DNS lookups left       '
-            +Object.keys(dnscache).length+' total lookups  '+(Math.round(used * 100) / 100)+' MB used');
-
-        if(readmailbox && Object.keys(dnscache).length > 0 
-            && Object.keys(dnscache).filter(d=>typeof dnscache[d] === 'object').length === 0) {
+        if(readmailbox && donelookup() && !fin) {
+            fin = true;
             const display = (stats) => {
                 const o = Object.keys(stats).sort((a,b)=>stats[a].total-stats[b].total);
                 o.slice(-20).reverse().map(i=>console.log(i,stats[i]));
@@ -117,7 +156,7 @@ async function processLineByLine() {
                         const p = r.policy_evaluated[0];
                         if(p.spf[0] == 'fail') stats[t].fail_spf += c;
                         if(p.dkim[0] == 'fail') stats[t].fail_dkim += c;
-
+                        done();
                     };
                     if(!graphstats[day]) {
                         graphstats[day] = { total: 0, fail_spf: 0, fail_dkim: 0};
@@ -127,6 +166,12 @@ async function processLineByLine() {
                     dostats(day,graphstats);
                     dostats(t,tostats);
                     dostats(t,graphstats[day].tostats);
+                    lookup(source,h=>{
+                        const t = source==h?source:h.toString().match(/([^/.]+\.(com|co)\.\w+|[^/.]+.\w+)$/)[1];
+                        dostats(t,fromstats);
+                        dostats(t,graphstats[day].fromstats);
+                    });
+/*
                     if(source in dnscache) {
                         if(typeof dnscache[source] === 'object') dnscache[source].push(dostats);
                         else dostats(dnscache[source],fromstats);
@@ -150,7 +195,7 @@ async function processLineByLine() {
                         };
                         if(DO_LOOKUP) resolver[Math.floor(Math.random()*NUM_RESOLVERS)].reverse(source,resolveresult);
                         else resolveresult(true,false);
-                    }
+                    } */
                 });
             });
         });
@@ -176,6 +221,7 @@ async function processLineByLine() {
         }
         mail += line+"\n";
     }
+
     readmailbox = true;
     done();
 }
