@@ -43,13 +43,17 @@ d3.json('/dmarc.json').then((data) => {
 
         const datef = d3.timeFormat('%Y-%m-%d');
 
-        let xScale = d3.scaleTime()
-            .domain(d3.extent(dataset.map(d=>d.x)))
-            .rangeRound([0,width]);
-        
+        let xScale = null;
         if(typeof dataset[0].x != 'object') xScale = d3.scaleBand()
             .domain(dataset.map(d=>d.x))
             .rangeRound([0,width]);
+        else {
+            const e = d3.extent(dataset.map(d=>d.x));
+            e[1] = (new Date(e[1])).setDate(e[1].getDate()+1);
+            xScale = d3.scaleTime()
+                .domain(e)
+                .rangeRound([0,width]);
+        }
 
         let yScale = d3.scaleLinear()
             .domain([0,d3.max(dataset.map(d=>d3.max(showing.map(s=>d[s]))))])
@@ -84,7 +88,7 @@ d3.json('/dmarc.json').then((data) => {
             let sgroup = svg.append("g")
                 .classed(s,true);
 
-            let barwidth = width/dataset.length/showing.length;
+            let barwidth = width/dataset.length/showing.length/1.5;
             sgroup.selectAll("."+s+"-bar")
                 .data(dataset)
                 .join("rect")
@@ -93,9 +97,9 @@ d3.json('/dmarc.json').then((data) => {
                 .attr("x", d=>xScale(d.x))
                 .attr("y", d=>yScale(d[s]))
                 .attr("height", d=>yScale(0)-yScale(d[s]))
-                .attr("width", barwidth-1)
+                .attr("width", barwidth)
                 .attr("transform", "translate("+si*barwidth+")")
-                .attr("fill",d3.schemeCategory10[si])
+                .attr("fill",d3.schemeCategory10[series.indexOf(s)])
                 .on("mouseover", (d,i) => showlabel(i,false))
                 .on("mouseout", (d,i) => showlabel(i,true))
                 .on("click", d => {
