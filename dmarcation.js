@@ -65,11 +65,12 @@ const lookup = (ip,result) => {
 
 const donelookup = () => Object.keys(cache).reduce((s,d)=>s+(cache[d] === false ? 1 : 0),0) == 0;
 
-async function processLineByLine() {
+async function processLineByLine(mailbox) {
+    console.log('reading '+mailbox);
     const fromstats = {};
     const tostats = {};
     const graphstats = {};
-    const fileStream = fs.createReadStream('/mailbox');
+    const fileStream = fs.createReadStream(mailbox);
     const rl = readline.createInterface({
         input: fileStream,
         crlfDelay: Infinity
@@ -117,11 +118,11 @@ async function processLineByLine() {
                 } else if(req.url.match(/^\/graph.js/)) {
                     res.setHeader("Content-Type", 'application/javascript');
                     res.writeHead(200);
-                    res.end(fs.readFileSync('/codecopy/graph.js'));
+                    res.end(fs.readFileSync('/code/graph.js'));
                 } else {
                     res.setHeader("Content-Type", 'text/html');
                     res.writeHead(200);
-                    res.end(fs.readFileSync('/codecopy/graph.html'));
+                    res.end(fs.readFileSync('/code/graph.html'));
                 }
             }).listen(8000);
         }
@@ -193,4 +194,7 @@ async function processLineByLine() {
     done();
 }
 
-processLineByLine();
+if(process.argv.length < 3) {
+    console.log('usage npm start -- mailboxfile')
+    return;
+} else processLineByLine(process.argv[2]);

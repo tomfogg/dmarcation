@@ -11,5 +11,10 @@
   },
   "scripts": {
     "start": "node dmarcation.js"
+  },
+  "dependencies": {
+    "adm-zip": "^0.4.13",
+    "mailparser": "^2.6.0",
+    "xml2js": "^0.4.19"
   }
 }
