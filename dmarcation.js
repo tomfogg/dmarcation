@@ -69,8 +69,6 @@ async function processLineByLine() {
     const fromstats = {};
     const tostats = {};
     const graphstats = {};
-    const dnscache = {};
-    const dnsretry = {};
     const fileStream = fs.createReadStream('/mailbox');
     const rl = readline.createInterface({
         input: fileStream,
@@ -93,8 +91,8 @@ async function processLineByLine() {
             display(fromstats);
             console.log('Top 20 addresses mails were sent to');
             display(tostats);
-            console.log('stats by day');
-            console.log(graphstats);
+//            console.log('stats by day');
+//            console.log(graphstats);
 
             const clip = stats=>Object.keys(stats)
                 .sort((a,b)=>stats[a].total-stats[b].total)
@@ -131,20 +129,14 @@ async function processLineByLine() {
 
     const doparse = (x,parsed) => {
         parseString(x, (e, r) => {
-  //          if(parsed.headers.get('subject').match(/google.com/)) console.log(x.toString());
             if(e) {
                 console.log(parsed.headers.get('subject'),'error parsing xml');
                 return;
             }
-            //                      console.log(r.feedback.report_metadata.length);
-            //                        if(!r.feedback.report_metadata[0].org_name) console.log(r.feedback.report_metadata);
-            //
-            //
             const day = new Date(r.feedback.report_metadata[0].date_range[0].begin*1000).toISOString().slice(0,10);
             const begin = r.feedback.report_metadata[0].date_range[0].begin;
             const end = r.feedback.report_metadata[0].date_range[0].end;
             maxgap = Math.max(Math.round((end-begin)/60/60/24),maxgap);
-//            console.log('datat from '+new Date(begin*1000)+' to '+new Date(end*1000), Math.round((end-begin)/60/60/24));
             const t = r.feedback.report_metadata[0].org_name.join(',');
             r.feedback.record.map(d=>{
                 d.row.map(r=>{
@@ -171,31 +163,6 @@ async function processLineByLine() {
                         dostats(t,fromstats);
                         dostats(t,graphstats[day].fromstats);
                     });
-/*
-                    if(source in dnscache) {
-                        if(typeof dnscache[source] === 'object') dnscache[source].push(dostats);
-                        else dostats(dnscache[source],fromstats);
-                    } else {
-                        dnscache[source] = [dostats];
-                        const resolveresult = (e,h)=> {
-                            if(e) { 
-                                dnsretry[source] = source in dnsretry ? dnsretry[source]+1 : 1;
-                                if(DO_LOOKUP && dnsretry[source] < MAX_RETRIES) {
-                                    console.log('failed lookup of '+source+' retry '+dnsretry[source]);
-                                    setTimeout(()=>resolver[Math.floor(Math.random()*NUM_RESOLVERS)]
-                                        .reverse(source,resolveresult),1000*dnsretry[source]+Math.random()*5000);
-                                    return;
-                                }
-                            }
-                            const t = e?source:h.toString().match(/([^/.]+\.(com|co)\.\w+|[^/.]+.\w+)$/)[1];
-                            dnscache[source].map(f=>f(t,fromstats));
-                            dnscache[source].map(f=>f(t,graphstats[day].fromstats));
-                            dnscache[source] = t;
-                            done();
-                        };
-                        if(DO_LOOKUP) resolver[Math.floor(Math.random()*NUM_RESOLVERS)].reverse(source,resolveresult);
-                        else resolveresult(true,false);
-                    } */
                 });
             });
         });
@@ -207,7 +174,7 @@ async function processLineByLine() {
             let parsed = await parse(mail);
             if(parsed.attachments.length) {
                 const a = parsed.attachments[0];
-                if(a.contentType == 'application/zip') {
+                if(a.contentType == 'application/zip' || a.contentType == 'application/x-zip-compressed') {
                     const z = new zip(a.content);
                     z.getEntries().map(f=>{
                         doparse(f.getData(),parsed);
