@@ -14,6 +14,8 @@ Node >=11.4
 
 Supply a mailbox file in [MBOX format](https://en.wikipedia.org/wiki/Mbox) with DMARC report emails in (these emails should each contain a zipped or gzipped xml filewith stats about mail delivery). [Thunderbird](https://www.thunderbird.net) stores its emails in this format. Outlook can export to this format with the `Apple Mac Export` option. Exports from Apple Mail are in this format.
 
+After the mails are processed and the domain names looked up some stats are displayed on the commandline and a graph is hosted at [http://localhost:8000](http://localhost:8000). You can drill down into days by clicking on the bars and hide/show the different stats by clicking on the lengend.
+
 ### With Docker
 
 either
