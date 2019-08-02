@@ -80,7 +80,8 @@ d3.json('/dmarc.json').then((data) => {
 
         svg.append("g")
             .attr("class", "y axis")
-            .call(d3.axisLeft(yScale));
+            .call(d3.axisLeft(yScale)
+            .tickFormat(d3.format(".0s")));
 
         let showlabel = (i,show) => d3.selectAll(".label").classed("hidden",(d,j) => j==i ? show : true);
 

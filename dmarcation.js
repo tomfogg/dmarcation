@@ -44,7 +44,9 @@ const lookup = (ip,result) => {
         setTimeout(()=>lookup(ip,result),1000*(ip in retry ? retry[ip] : 1)+Math.random()*5000);
     } else {
         resolver[ready].active = true;
-        resolver[ready].resolve.reverse(ip,(err,host)=>{
+        const t = setTimeout(()=>getresult(true,null),5000);
+        const getresult = (err,host)=>{
+            clearTimeout(t);
             resolver[ready].active = false;
             if(err) {
                 if(retry[ip] > MAX_RETRIES) {
@@ -59,7 +61,8 @@ const lookup = (ip,result) => {
                 report();
                 result(host[0]);
             }
-        });
+        };
+        resolver[ready].resolve.reverse(ip,getresult);
     }
 };
 
@@ -175,12 +178,12 @@ async function processLineByLine(mailbox) {
             let parsed = await parse(mail);
             if(parsed.attachments.length) {
                 const a = parsed.attachments[0];
-                if(a.contentType == 'application/zip' || a.contentType == 'application/x-zip-compressed') {
+                if(a.contentType == 'application/zip' || a.contentType == 'application/x-zip-compressed' || a.filename.match(/\.zip$/)) {
                     const z = new zip(a.content);
                     z.getEntries().map(f=>{
                         doparse(f.getData(),parsed);
                     });
-                } else if(a.contentType && a.contentType.match(/gzip/)) {
+                } else if((a.contentType && a.contentType.match(/gzip/)) || a.filename.match(/\.gz$/)) {
                     const xml = zlib.unzipSync(a.content);
                     doparse(xml,parsed);
                 } else console.log('\n',parsed.headers.get('subject'),'bad contentType',a.contentType);
