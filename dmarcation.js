@@ -68,7 +68,7 @@ const lookup = (ip,result) => {
 
 const donelookup = () => Object.keys(cache).reduce((s,d)=>s+(cache[d] === false ? 1 : 0),0) == 0;
 
-async function processLineByLine(mailbox) {
+async function processLineByLine(mailbox,from_date,to_date) {
     console.log('reading '+mailbox);
     const fromstats = {};
     const tostats = {};
@@ -131,7 +131,7 @@ async function processLineByLine(mailbox) {
         }
     };
 
-    const doparse = (x,parsed) => {
+    const doparse = (x,parsed,from_date,to_date) => {
         parseString(x, (e, r) => {
             if(e) {
                 console.log(parsed.headers.get('subject'),'error parsing xml');
@@ -140,35 +140,38 @@ async function processLineByLine(mailbox) {
             const day = new Date(r.feedback.report_metadata[0].date_range[0].begin*1000).toISOString().slice(0,10);
             const begin = r.feedback.report_metadata[0].date_range[0].begin;
             const end = r.feedback.report_metadata[0].date_range[0].end;
-            maxgap = Math.max(Math.round((end-begin)/60/60/24),maxgap);
-            const t = r.feedback.report_metadata[0].org_name.join(',');
-            r.feedback.record.map(d=>{
-                d.row.map(r=>{
-                    const source = r.source_ip.toString();
-                    const dostats = (t,stats)=>{
-                        if(!stats[t]) stats[t] = { total: 0, fail_spf: 0, fail_dkim: 0 };
-                        const c = parseInt(r.count);
-                        stats[t].total += c;
-                        const p = r.policy_evaluated[0];
-                        if(p.spf[0] == 'fail') stats[t].fail_spf += c;
-                        if(p.dkim[0] == 'fail') stats[t].fail_dkim += c;
-                        done();
-                    };
-                    if(!graphstats[day]) {
-                        graphstats[day] = { total: 0, fail_spf: 0, fail_dkim: 0};
-                        graphstats[day].tostats = {};
-                        graphstats[day].fromstats = {};
-                    }
-                    dostats(day,graphstats);
-                    dostats(t,tostats);
-                    dostats(t,graphstats[day].tostats);
-                    lookup(source,h=>{
-                        const t = source==h?source:h.toString().match(/([^/.]+\.(com|co)\.\w+|[^/.]+.\w+)$/)[1];
-                        dostats(t,fromstats);
-                        dostats(t,graphstats[day].fromstats);
+            if((!from_date || new Date(begin*1000) > new Date(from_date)) 
+                && (!to_date || (new Date(end*1000) < new Date(to_date)))) {
+                maxgap = Math.max(Math.round((end-begin)/60/60/24),maxgap);
+                const t = r.feedback.report_metadata[0].org_name.join(',');
+                r.feedback.record.map(d=>{
+                    d.row.map(r=>{
+                        const source = r.source_ip.toString();
+                        const dostats = (t,stats)=>{
+                            if(!stats[t]) stats[t] = { total: 0, fail_spf: 0, fail_dkim: 0 };
+                            const c = parseInt(r.count);
+                            stats[t].total += c;
+                            const p = r.policy_evaluated[0];
+                            if(p.spf[0] == 'fail') stats[t].fail_spf += c;
+                            if(p.dkim[0] == 'fail') stats[t].fail_dkim += c;
+                            done();
+                        };
+                        if(!graphstats[day]) {
+                            graphstats[day] = { total: 0, fail_spf: 0, fail_dkim: 0};
+                            graphstats[day].tostats = {};
+                            graphstats[day].fromstats = {};
+                        }
+                        dostats(day,graphstats);
+                        dostats(t,tostats);
+                        dostats(t,graphstats[day].tostats);
+                        lookup(source,h=>{
+                            const t = source==h?source:h.toString().match(/([^/.]+\.(com|co)\.\w+|[^/.]+.\w+)$/)[1];
+                            dostats(t,fromstats);
+                            dostats(t,graphstats[day].fromstats);
+                        });
                     });
                 });
-            });
+            }
         });
     };
 
@@ -178,14 +181,17 @@ async function processLineByLine(mailbox) {
             let parsed = await parse(mail);
             if(parsed.attachments.length) {
                 const a = parsed.attachments[0];
-                if(a.contentType == 'application/zip' || a.contentType == 'application/x-zip-compressed' || a.filename.match(/\.zip$/)) {
+                if(a.contentType == 'application/zip' 
+                    || a.contentType == 'application/x-zip-compressed' 
+                    || (a.filename && a.filename.match(/\.zip$/))) {
                     const z = new zip(a.content);
                     z.getEntries().map(f=>{
-                        doparse(f.getData(),parsed);
+                        doparse(f.getData(),parsed,from_date,to_date);
                     });
-                } else if((a.contentType && a.contentType.match(/gzip/)) || a.filename.match(/\.gz$/)) {
+                } else if((a.contentType && a.contentType.match(/gzip/)) 
+                    || (a.filename && a.filename.match(/\.gz$/))) {
                     const xml = zlib.unzipSync(a.content);
-                    doparse(xml,parsed);
+                    doparse(xml,parsed,from_date,to_date);
                 } else console.log('\n',parsed.headers.get('subject'),'bad contentType',a.contentType);
             } else console.log('\n',parsed.headers.get('subject'),'no attachment');
             mail = '';
@@ -198,6 +204,6 @@ async function processLineByLine(mailbox) {
 }
 
 if(process.argv.length < 3) {
-    console.log('usage npm start -- mailboxfile')
+    console.log('usage npm start -- mailboxfile [from date] [to date]')
     return;
-} else processLineByLine(process.argv[2]);
+} else processLineByLine(process.argv[2],process.argv[3],process.argv[4]);
