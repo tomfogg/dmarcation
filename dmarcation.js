@@ -98,8 +98,8 @@ async function processLineByLine(mailbox,from_date,to_date) {
 //            console.log('stats by day');
 //            console.log(graphstats);
 
-            const clip = stats=>Object.keys(stats)
-                .sort((a,b)=>stats[a].total-stats[b].total)
+            const clip = (stats,order)=>Object.keys(stats)
+                .sort((a,b)=>stats[a][order]-stats[b][order])
                 .slice(-20).reduce((s,d)=>{s[d] = stats[d]; return s;},{});
             
             console.log('listening on 8000');
@@ -107,17 +107,19 @@ async function processLineByLine(mailbox,from_date,to_date) {
                 console.log((new Date()).toISOString()+" "+req.method+": "+req.url);
 
                 if(req.url.match(/^\/dmarc.json/)) {
+                    let sortorder = req.url.match(/sort=([\w_]+)/);
+                    sortorder = sortorder ? sortorder[1] : 'total';
                     res.setHeader("Content-Type", 'application/json');
                     res.writeHead(200);
                     res.end(JSON.stringify({
                         days: Object.keys(graphstats).reduce((s,d)=>{
                             s[d]={...graphstats[d], 
-                                fromstats: clip(graphstats[d].fromstats), 
-                                tostats: clip(graphstats[d].tostats)};
+                                fromstats: clip(graphstats[d].fromstats,sortorder), 
+                                tostats: clip(graphstats[d].tostats,sortorder)};
                             return s;
                         },{}), 
-                        fromstats: clip(fromstats), 
-                        tostats: clip(tostats)}));
+                        fromstats: clip(fromstats,sortorder), 
+                        tostats: clip(tostats,sortorder)}));
                 } else if(req.url.match(/^\/graph.js/)) {
                     res.setHeader("Content-Type", 'application/javascript');
                     res.writeHead(200);
@@ -148,16 +150,17 @@ async function processLineByLine(mailbox,from_date,to_date) {
                     d.row.map(r=>{
                         const source = r.source_ip.toString();
                         const dostats = (t,stats)=>{
-                            if(!stats[t]) stats[t] = { total: 0, fail_spf: 0, fail_dkim: 0 };
+                            if(!stats[t]) stats[t] = { total: 0, fail_spf: 0, fail_dkim: 0, fail_both: 0 };
                             const c = parseInt(r.count);
                             stats[t].total += c;
                             const p = r.policy_evaluated[0];
                             if(p.spf[0] == 'fail') stats[t].fail_spf += c;
                             if(p.dkim[0] == 'fail') stats[t].fail_dkim += c;
+                            if(p.spf[0] == 'fail' && p.dkim[0] == 'fail') stats[t].fail_both += c;
                             done();
                         };
                         if(!graphstats[day]) {
-                            graphstats[day] = { total: 0, fail_spf: 0, fail_dkim: 0};
+                            graphstats[day] = { total: 0, fail_spf: 0, fail_dkim: 0, fail_both: 0};
                             graphstats[day].tostats = {};
                             graphstats[day].fromstats = {};
                         }

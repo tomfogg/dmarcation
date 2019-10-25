@@ -32,12 +32,13 @@ const url2state = (url) => {
             return i;
         },{});
     if(Object.keys(s.options).length == 0) delete s.options;
-    state = {};
+    let state = {};
     Object.assign(state,s);
     return s;
 };
 
-d3.json('/dmarc.json').then((data) => {
+let state = url2state(location.href.replace(location.origin,''));
+d3.json('/dmarc.json'+(state.options && state.options.sort ? '?sort='+state.options.sort : '')).then((data) => {
 
     let drawGraph = (dataset,showing,type,stattypes,series) => {
 
@@ -127,31 +128,42 @@ d3.json('/dmarc.json').then((data) => {
                 });
         });
        
-            stattypes.map((s,si)=>svg.append("text")
-                .attr("x",width)
-                .attr("dx","-10em")
-                .attr("dy",series.length+1+si+"em")
-                .attr("fill",d3.schemeCategory10[si])
-                .text(s+" "+(state.stattype!=s ? " (show)" : " (showing)"))
-                .on("click",(e,i,c)=>{
-                    state.stattype=s;
-                    d3.select(c[0]).text(s+" "+(state.stattype!=s ? " (show)" : " (showing)"));
-                    history.pushState({},"",state2url(state));
-                    url2graph();
-                }));
+        stattypes.map((s,si)=>svg.append("text")
+            .attr("x",width)
+            .attr("dx","-10em")
+            .attr("dy",series.length+1+si+"em")
+            .attr("fill",d3.schemeCategory10[si])
+            .text(s+" "+(state.stattype!=s ? " (show)" : " (showing)"))
+            .on("click",(e,i,c)=>{
+                state.stattype=s;
+                d3.select(c[0]).text(s+" "+(state.stattype!=s ? " (show)" : " (showing)"));
+                history.pushState({},"",state2url(state));
+                url2graph();
+            }));
 
-            svg.append("text")
-                .attr("x",width)
-                .attr("dx","-10em")
-                .attr("dy",stattypes.length+series.length+2+"em")
-                .attr("fill",'black')
-                .text('back')
-                .on("click",()=>{
-                    delete state.stattype;
-                    delete state.day;
-                    history.pushState({},"",state2url(state));
-                    url2graph();
-                });
+        series.map((s,si)=>svg.append("text")
+            .attr("x",width)
+            .attr("dx","-10em")
+            .attr("dy",series.length+stattypes.length+3+si+"em")
+            .attr("fill",d3.schemeCategory10[si])
+            .text("sort by "+s)
+            .on('click',()=>{
+                location.href=state2url({...state, options: {sort: s}});
+            })
+        );
+
+        svg.append("text")
+            .attr("x",width)
+            .attr("dx","-10em")
+            .attr("dy",stattypes.length+series.length*2+4+"em")
+            .attr("fill",'black')
+            .text('back')
+            .on("click",()=>{
+                delete state.stattype;
+                delete state.day;
+                history.pushState({},"",state2url(state));
+                url2graph();
+            });
 
         let label = svg.selectAll(".label")
             .data(dataset)
