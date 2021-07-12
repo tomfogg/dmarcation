@@ -143,7 +143,8 @@ async function processLineByLine(mailbox,from_date,to_date) {
             const begin = r.feedback.report_metadata[0].date_range[0].begin;
             const end = r.feedback.report_metadata[0].date_range[0].end;
             if((!from_date || new Date(begin*1000) > new Date(from_date)) 
-                && (!to_date || (new Date(end*1000) < new Date(to_date)))) {
+                && (!to_date || (new Date(end*1000) < new Date(to_date)))
+                && 'record' in r.feedback && 'map' in r.feedback.record) {
                 maxgap = Math.max(Math.round((end-begin)/60/60/24),maxgap);
                 const t = r.feedback.report_metadata[0].org_name.join(',');
                 r.feedback.record.map(d=>{
